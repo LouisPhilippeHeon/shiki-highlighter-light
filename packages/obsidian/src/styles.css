@@ -47,9 +47,9 @@ body {
 	cursor: text;
 }
 
-/* Disable ligatures in code blocks, as they can cause incorrect highlighting */
 div.expressive-code {
-	font-variant-ligatures: no-contextual;
+	/* Originally, comment stated enbling ligatures could break highlighting, I was unable to confirm the issue */
+	font-variant-ligatures: unset !important;
 	tab-size: 4ch;
 
 	&>figure>pre {
