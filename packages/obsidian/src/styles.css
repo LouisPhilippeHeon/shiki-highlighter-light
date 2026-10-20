@@ -1,6 +1,6 @@
 body {
 	--shiki-code-background: var(--code-background);
-	--shiki-code-normal: var(--text-muted);
+	--shiki-code-normal: var(--code-normal);
 	--shiki-code-comment: var(--text-faint);
 	--shiki-code-function: var(--color-green);
 	--shiki-code-important: var(--color-orange);
@@ -50,24 +50,39 @@ body {
 /* Disable ligatures in code blocks, as they can cause incorrect highlighting */
 div.expressive-code {
 	font-variant-ligatures: no-contextual;
+	tab-size: 4ch;
 
-	& > figure > pre {
+	&>figure>pre {
 		/* Fix for shimmering focus */
 		margin: 0 !important;
 	}
 
-	& > figure.frame {
-		&.has-title > figcaption.header::before {
+	&>figure.frame {
+		&.has-title>figcaption.header::before {
 			pointer-events: all !important;
 		}
 
-		& > figcaption.header {
+		&>figcaption.header {
 			z-index: unset;
 		}
 
-		& > div.copy {
+		&>div.copy {
 			/* Move the copy button to the bottom right */
 			inset-block-end: calc(var(--ec-brdWd) + var(--ec-uiPadInl) / 2);
+		}
+	}
+
+	/* Remove padding at the end for the copy button */
+	:nth-child(1 of .ec-line) .code {
+		padding-inline-end: var(--ec-codePadInl);
+	}
+
+	/* Fix a bug where plain text files could have low contrast */
+	[data-language="text"],
+	[data-language="txt"],
+	[data-language="plain"] {
+		.code>span {
+			color: var(--shiki-code-normal);
 		}
 	}
 }
@@ -79,16 +94,18 @@ div.expressive-code {
 }
 
 /* Hide the frontmatter code block in reading view again */
-div.markdown-preview-view > div > div.mod-header + div > div.block-language-yaml.shiki-hide-in-reading-mode {
+div.markdown-preview-view>div>div.mod-header+div>div.block-language-yaml.shiki-hide-in-reading-mode {
 	display: none;
 }
 
 span.shiki-bold {
 	font-weight: var(--bold-weight, 600);
 }
+
 span.shiki-italic {
 	font-style: italic;
 }
+
 span.shiki-ul {
 	text-decoration: underline;
 }
@@ -96,4 +113,64 @@ span.shiki-ul {
 /* Settings tab  */
 .setting-item-control input.shiki-custom-theme-folder {
 	min-width: 250px;
+}
+
+/* Wrap */
+.expressive-code pre[style*="--ecMaxLine"] {
+	--ecMaxLine: 0px !important;
+
+	.code:has(span) {
+		display: table;
+		white-space: pre-wrap;
+		overflow-wrap: anywhere !important;
+		padding-inline-start: calc(var(--ec-codePadInl) - var(--ecGtrBrdWd) + 2ch) !important;
+		text-indent: -2ch !important;
+	}
+
+	.code>.indent {
+		display: table-cell;
+		width: 0;
+		white-space: pre;
+	}
+}
+
+@media print {
+	.expressive-code pre {
+		--ecMaxLine: 0px !important;
+
+		.ec-line:first-child {
+			page-break-after: avoid;
+		}
+
+		.code:has(span) {
+			display: table;
+			white-space: pre-wrap;
+			overflow-wrap: anywhere !important;
+			padding-inline-start: calc(var(--ec-codePadInl) - var(--ecGtrBrdWd) + 2ch) !important;
+			text-indent: -2ch !important;
+		}
+
+		.code>.indent {
+			display: table-cell;
+			width: 0;
+			white-space: pre;
+		}
+	}
+}
+
+.table-cell-wrapper .shiki-inline,
+td .shiki-inline {
+	white-space-collapse: preserve;
+}
+
+/* Shiki code blocks have the same padding as native code blocks in preview mode */
+.markdown-source-view .expressive-code {
+	code {
+		padding: 0;
+	}
+
+	code::before,
+	code::after {
+		content: " ";
+	}
 }
