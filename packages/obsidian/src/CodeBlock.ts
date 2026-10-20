@@ -2,6 +2,55 @@ import { EditorView } from '@codemirror/view';
 import { type MarkdownPostProcessorContext, MarkdownRenderChild } from 'obsidian';
 import type ShikiPlugin from 'packages/obsidian/src/main';
 
+/**
+ * Returns the text after the code block language on the opening fence line, or null if the line is not an opening fence for that language.
+ */
+export function parseMetaString(fenceLine: string, language: string): string | null {
+	// regexp to match the text after the code block language
+	const regex = new RegExp('^[^`~]*?\\s*(```+|~~~+)' + language + ' (.*)', 'g');
+	const match = regex.exec(fenceLine);
+	return match !== null ? match[2] : null;
+}
+
+/**
+ * Finds the code block with the given language and content in a markdown text and returns its meta string.
+ * Returns the meta string of the first match, or null if no code block matches.
+ */
+export function findMetaStringInText(text: string, source: string, language: string): string | null {
+	const lines = text.split('\n').map(line => line.replace(/\r$/, ''));
+
+	for (let i = 0; i < lines.length; i++) {
+		const metaString = parseMetaString(lines[i], language);
+		if (metaString === null) {
+			continue;
+		}
+
+		const fence = /^([^`~]*?\s*)(```+|~~~+)/.exec(lines[i])!;
+		// the prefix of the fence line, e.g. "> " for code blocks in callouts
+		const prefix = fence[1].replace(/\s+$/, '');
+		const closingFence = new RegExp(`^\\s*${fence[2][0]}{${fence[2].length},}\\s*$`);
+
+		const content: string[] = [];
+		for (let j = i + 1; j < lines.length; j++) {
+			let line = lines[j];
+			if (prefix !== '' && line.startsWith(prefix)) {
+				line = line.slice(prefix.length).replace(/^ /, '');
+			}
+
+			if (closingFence.test(line)) {
+				if (content.join('\n').trim() === source.trim()) {
+					return metaString;
+				}
+				break;
+			}
+
+			content.push(line);
+		}
+	}
+
+	return null;
+}
+
 export class CodeBlock extends MarkdownRenderChild {
 	plugin: ShikiPlugin;
 	source: string;
@@ -19,24 +68,22 @@ export class CodeBlock extends MarkdownRenderChild {
 		this.cachedMetaString = '';
 	}
 
-	private getMetaString(): string {
+	private async getMetaString(): Promise<string> {
 		const sectionInfo = this.ctx.getSectionInfo(this.containerEl);
 
-		if (sectionInfo === null) {
+		if (sectionInfo !== null) {
+			const lines = sectionInfo.text.split('\n');
+			return parseMetaString(lines[sectionInfo.lineStart], this.language) ?? '';
+		}
+
+		// no section info is available when exporting to PDF, so we look for the code block in the source file
+		const file = this.plugin.app.vault.getFileByPath(this.ctx.sourcePath);
+		if (file === null) {
 			return '';
 		}
 
-		const lines = sectionInfo.text.split('\n');
-		const startLine = lines[sectionInfo.lineStart];
-
-		// regexp to match the text after the code block language
-		const regex = new RegExp('^[^`~]*?\\s*(```+|~~~+)' + this.language + ' (.*)', 'g');
-		const match = regex.exec(startLine);
-		if (match !== null) {
-			return match[2];
-		} else {
-			return '';
-		}
+		const text = await this.plugin.app.vault.cachedRead(file);
+		return findMetaStringInText(text, this.source, this.language) ?? '';
 	}
 
 	private async render(metaString: string): Promise<void> {
@@ -48,7 +95,7 @@ export class CodeBlock extends MarkdownRenderChild {
 		// only rerender if they are different, to avoid unnecessary work
 		// since the meta string is likely to be the same most of the time
 		// and if the code block content changes obsidian will rerender for us
-		const newMetaString = this.getMetaString();
+		const newMetaString = await this.getMetaString();
 		if (newMetaString !== this.cachedMetaString) {
 			this.cachedMetaString = newMetaString;
 			await this.render(newMetaString);
@@ -163,8 +210,10 @@ export class CodeBlock extends MarkdownRenderChild {
 
 		this.registerDomEvent(this.containerEl, 'mousedown', event => this.onMouseDown(event), { capture: true });
 
-		this.cachedMetaString = this.getMetaString();
-		void this.render(this.cachedMetaString);
+		void this.getMetaString().then(metaString => {
+			this.cachedMetaString = metaString;
+			return this.render(metaString);
+		});
 	}
 
 	public onunload(): void {
