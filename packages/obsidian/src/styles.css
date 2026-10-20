@@ -38,12 +38,13 @@ body {
 	--shiki-active-tab-border-color: var(--shiki-highlight-neutral);
 }
 
-.edit-block-button {
-	pointer-events: all;
+/* Clicking a code block in live preview places the cursor in it, so the edit button is not needed */
+.cm-embed-block:has(div.expressive-code) .edit-block-button {
+	display: none;
+}
 
-	& > svg {
-		pointer-events: all;
-	}
+.cm-embed-block div.expressive-code pre {
+	cursor: text;
 }
 
 /* Disable ligatures in code blocks, as they can cause incorrect highlighting */
