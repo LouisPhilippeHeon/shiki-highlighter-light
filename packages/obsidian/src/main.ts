@@ -17,7 +17,7 @@ export const SHIKI_INLINE_REGEX = /^\{([^\s]+)\} (.*)/i; // format: `{lang} code
 export default class ShikiPlugin extends Plugin {
 	highlighter!: CodeHighlighter;
 	activeCodeBlocks!: Map<string, (CodeBlock | InlineCodeBlock)[]>;
-	settings!: Settings;
+	declare settings: Settings;
 	loadedSettings!: Settings;
 	updateCm6Plugin!: () => Promise<void>;
 

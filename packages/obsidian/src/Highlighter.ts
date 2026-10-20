@@ -7,6 +7,7 @@ import { normalizePath, Notice } from 'obsidian';
 import { DEFAULT_SETTINGS } from 'packages/obsidian/src/settings/Settings';
 import { toDom } from 'hast-util-to-dom';
 import { createEcEngineConfig } from 'packages/ec-core/src/Config';
+import BUNDLED_LANGUAGE_ALIASES from 'virtual:shiki-lang-aliases';
 
 interface CustomTheme {
 	name: string;
@@ -45,7 +46,7 @@ export class CodeHighlighter {
 		await this.loadEC();
 		await this.loadShiki();
 
-		this.supportedLanguages = [...LANGUAGE_SPECIAL, ...this.customLanguages.map(i => i.name)];
+		this.supportedLanguages = [...LANGUAGE_SPECIAL, ...this.customLanguages.flatMap(i => [i.name, ...(i.aliases ?? [])])];
 	}
 
 	async unload(): Promise<void> {
@@ -74,6 +75,11 @@ export class CodeHighlighter {
 				if (!language.name) {
 					throw Error('Invalid JSON language file is missing a name property.');
 				}
+
+				// keep the aliases the bundled shiki language of the same name had (e.g. `ts` for `typescript`)
+				const aliases = new Set([...(language.aliases ?? []), ...(BUNDLED_LANGUAGE_ALIASES[language.name] ?? [])]);
+				aliases.delete(language.name);
+				language.aliases = [...aliases];
 
 				this.customLanguages.push(language);
 			} catch (e) {
