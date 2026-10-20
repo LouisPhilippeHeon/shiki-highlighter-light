@@ -1,4 +1,4 @@
-import { type BundledTheme, bundledThemes, type ThemeRegistration } from 'shiki';
+import { type ThemeRegistration } from 'shiki/core';
 import type * as hast_types from 'hast';
 import { OBSIDIAN_THEME } from 'packages/ec-core/src/ObsidianTheme';
 import type ShikiPlugin from 'packages/obsidian/src/main';
@@ -22,8 +22,6 @@ export class ThemeMapper {
 
 		if (this.usingCustomTheme()) {
 			return this.plugin.highlighter.customThemes.find(theme => theme.name === activeTheme) as ThemeRegistration;
-		} else if (!this.usingObsidianTheme()) {
-			return (await bundledThemes[activeTheme as BundledTheme]()).default;
 		}
 
 		return {
@@ -52,8 +50,6 @@ export class ThemeMapper {
 
 		if (this.usingCustomTheme()) {
 			return this.plugin.highlighter.customThemes.find(theme => theme.name === activeTheme) as ThemeRegistration;
-		} else if (!this.usingObsidianTheme()) {
-			return (await bundledThemes[activeTheme as BundledTheme]()).default;
 		}
 
 		return OBSIDIAN_THEME;

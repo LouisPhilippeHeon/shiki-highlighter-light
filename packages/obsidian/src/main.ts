@@ -6,6 +6,7 @@ import { ShikiSettingsTab } from 'packages/obsidian/src/settings/SettingsTab';
 import { filterHighlightAllPlugin, type PrismWithFilterHighlightAll } from 'packages/obsidian/src/PrismPlugin';
 import { CodeHighlighter } from 'packages/obsidian/src/Highlighter';
 import { InlineCodeBlock } from 'packages/obsidian/src/InlineCodeBlock';
+import { OBSIDIAN_THEME_IDENTIFIER } from 'packages/obsidian/src/themes/ThemeMapper';
 
 import 'packages/obsidian/src/styles.css';
 import 'virtual:ec-styles.css';
@@ -175,6 +176,14 @@ export default class ShikiPlugin extends Plugin {
 			this.settings.darkTheme = this.settings.theme;
 			this.settings.lightTheme = this.settings.theme;
 			this.settings.theme = undefined;
+		}
+
+		// bundled shiki themes are no longer included, so fall back to the default theme for anything that is not a custom theme
+		if (this.settings.darkTheme !== OBSIDIAN_THEME_IDENTIFIER && !this.settings.darkTheme.endsWith('.json')) {
+			this.settings.darkTheme = DEFAULT_SETTINGS.darkTheme;
+		}
+		if (this.settings.lightTheme !== OBSIDIAN_THEME_IDENTIFIER && !this.settings.lightTheme.endsWith('.json')) {
+			this.settings.lightTheme = DEFAULT_SETTINGS.lightTheme;
 		}
 	}
 

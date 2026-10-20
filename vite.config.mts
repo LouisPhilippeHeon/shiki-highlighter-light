@@ -95,9 +95,11 @@ export default defineConfig(({ mode }) => {
 			}),
 		],
 		resolve: {
-			alias: {
-				packages: path.resolve(__dirname, './packages'),
-			},
+			alias: [
+				{ find: 'packages', replacement: path.resolve(__dirname, './packages') },
+				// replace the full shiki entry (which bundles all themes and languages) for both our code and EC's shiki plugin
+				{ find: /^shiki$/, replacement: path.resolve(__dirname, './packages/obsidian/src/shikiLight.ts') },
+			],
 		},
 		build: {
 			lib: {

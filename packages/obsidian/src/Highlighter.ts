@@ -1,14 +1,7 @@
 import { ExpressiveCodeEngine } from '@expressive-code/core';
 import type ShikiPlugin from 'packages/obsidian/src/main';
-import {
-	bundledLanguages,
-	createHighlighter,
-	type LanguageRegistration,
-	type Highlighter,
-	type TokensResult,
-	type BundledLanguage,
-	type ThemedToken,
-} from 'shiki';
+import { type LanguageRegistration, type HighlighterCore, type TokensResult, type ThemedToken } from 'shiki/core';
+import { createHighlighter } from 'packages/obsidian/src/shikiLight';
 import { ThemeMapper } from 'packages/obsidian/src/themes/ThemeMapper';
 import { normalizePath, Notice } from 'obsidian';
 import { DEFAULT_SETTINGS } from 'packages/obsidian/src/settings/Settings';
@@ -36,7 +29,7 @@ export class CodeHighlighter {
 	ec!: ExpressiveCodeEngine;
 	ecStyleElement: HTMLElement | undefined;
 	supportedLanguages!: string[];
-	shiki!: Highlighter;
+	shiki!: HighlighterCore;
 	customThemes!: CustomTheme[];
 	customLanguages!: LanguageRegistration[];
 
@@ -52,7 +45,7 @@ export class CodeHighlighter {
 		await this.loadEC();
 		await this.loadShiki();
 
-		this.supportedLanguages = [...Object.keys(bundledLanguages), ...LANGUAGE_SPECIAL, ...this.customLanguages.map(i => i.name)];
+		this.supportedLanguages = [...LANGUAGE_SPECIAL, ...this.customLanguages.map(i => i.name)];
 	}
 
 	async unload(): Promise<void> {
@@ -207,12 +200,8 @@ export class CodeHighlighter {
 		if (!this.obsidianSafeLanguageNames().includes(lang)) {
 			return undefined;
 		}
-		// load bundled language when needed
-		if (!this.shiki.getLoadedLanguages().includes(lang)) {
-			await this.shiki.loadLanguage(lang as BundledLanguage);
-		}
 		return this.shiki.codeToTokens(code, {
-			lang: lang as BundledLanguage,
+			lang,
 			theme: this.themeMapper.getThemeIdentifier(),
 		});
 	}

@@ -1,7 +1,6 @@
 import { PluginSettingTab, Setting, Platform, Notice, normalizePath } from 'obsidian';
 import type ShikiPlugin from 'packages/obsidian/src/main';
 import { StringSelectModal } from 'packages/obsidian/src/settings/StringSelectModal';
-import { bundledThemesInfo } from 'shiki';
 import { OBSIDIAN_THEME_IDENTIFIER } from 'packages/obsidian/src/themes/ThemeMapper';
 import { FrameType } from 'packages/obsidian/src/settings/Settings';
 
@@ -18,11 +17,9 @@ export class ShikiSettingsTab extends PluginSettingTab {
 		this.containerEl.empty();
 
 		const customThemes = Object.fromEntries(this.plugin.highlighter.customThemes.map(theme => [theme.name, `${theme.displayName} (${theme.type})`]));
-		const builtInThemes = Object.fromEntries(bundledThemesInfo.map(theme => [theme.id, `${theme.displayName} (${theme.type})`]));
 		const themes = {
 			[OBSIDIAN_THEME_IDENTIFIER]: 'Obsidian built-in (both)',
 			...customThemes,
-			...builtInThemes,
 		};
 
 		new Setting(this.containerEl).setName('All setting changes require a reload of the highlighter').addButton(button => {
