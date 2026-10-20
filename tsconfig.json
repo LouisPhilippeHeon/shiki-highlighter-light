@@ -1,0 +1,28 @@
+{
+	"compilerOptions": {
+		"paths": {
+			"packages/*": ["./packages/*"]
+		},
+		"module": "ESNext",
+		"target": "ESNext",
+		"allowJs": true,
+		"checkJs": true,
+		"noImplicitAny": true,
+		"strict": true,
+		"strictNullChecks": true,
+		"noImplicitReturns": true,
+		"moduleResolution": "bundler",
+		"importHelpers": true,
+		"isolatedModules": true,
+		"skipLibCheck": true,
+		"verbatimModuleSyntax": true,
+		"resolveJsonModule": true,
+		"moduleDetection": "force",
+		"sourceMap": true,
+		"lib": ["DOM", "ESNext"],
+		"allowSyntheticDefaultImports": true,
+		"types": ["bun", "vite/client"],
+		"noEmit": true
+	},
+	"include": ["packages/*/src/**/*.ts", "packages/*/src/**/*.d.ts", "tests/**/*.ts"]
+}
