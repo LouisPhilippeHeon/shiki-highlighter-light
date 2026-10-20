@@ -29,7 +29,12 @@ export default class ShikiPlugin extends Plugin {
 		this.addSettingTab(new ShikiSettingsTab(this));
 
 		this.highlighter = new CodeHighlighter(this);
-		await this.highlighter.load();
+		// only the custom files are needed to register the code block processors,
+		// loading the engines is deferred to not slow down Obsidian's startup, renders wait for them
+		await this.highlighter.loadCustomFiles();
+		this.app.workspace.onLayoutReady(() => {
+			void this.highlighter.loadEngines();
+		});
 
 		this.activeCodeBlocks = new Map();
 
@@ -77,7 +82,7 @@ export default class ShikiPlugin extends Plugin {
 			},
 		});
 
-		await this.registerPrismPlugin();
+		void this.registerPrismPlugin();
 	}
 
 	async reloadHighlighter(): Promise<void> {

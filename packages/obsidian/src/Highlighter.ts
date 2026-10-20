@@ -34,24 +34,88 @@ export class CodeHighlighter {
 	customThemes!: CustomTheme[];
 	customLanguages!: LanguageRegistration[];
 
+	// the custom theme and language files, which are cheap to load and needed to register the code block processors
+	private customFilesLoading: Promise<void> | undefined;
+	// EC and shiki, which are expensive to load (shiki compiles its WASM engine), so their loading can be deferred
+	private enginesLoading: Promise<void> | undefined;
+	// settles once the engines are loaded, renders started before that wait on it
+	private enginesReady!: Promise<void>;
+	private settleEnginesReady!: { resolve: () => void; reject: (reason: unknown) => void };
+
 	constructor(plugin: ShikiPlugin) {
 		this.plugin = plugin;
 		this.themeMapper = new ThemeMapper(this.plugin);
+		this.resetEnginesReady();
 	}
 
+	/**
+	 * Loads everything, including the engines.
+	 */
 	async load(): Promise<void> {
-		await this.loadCustomThemes();
-		await this.loadCustomLanguages();
+		await this.loadCustomFiles();
+		await this.loadEngines();
+	}
 
-		await this.loadEC();
-		await this.loadShiki();
+	/**
+	 * Loads the custom themes and languages. After this, the supported languages and custom themes are known.
+	 */
+	loadCustomFiles(): Promise<void> {
+		this.customFilesLoading = (async (): Promise<void> => {
+			await Promise.all([this.loadCustomThemes(), this.loadCustomLanguages()]);
 
-		this.supportedLanguages = [...LANGUAGE_SPECIAL, ...this.customLanguages.flatMap(i => [i.name, ...(i.aliases ?? [])])];
+			this.supportedLanguages = [...LANGUAGE_SPECIAL, ...this.customLanguages.flatMap(i => [i.name, ...(i.aliases ?? [])])];
+		})();
+
+		return this.customFilesLoading;
+	}
+
+	/**
+	 * Loads EC and shiki, unless they are already loaded or loading.
+	 */
+	loadEngines(): Promise<void> {
+		this.enginesLoading ??= (async (): Promise<void> => {
+			// captured, since an unload during loading already replaces it for the next load
+			const settleEnginesReady = this.settleEnginesReady;
+			try {
+				await this.customFilesLoading;
+				await this.loadEC();
+				await this.loadShiki();
+				settleEnginesReady.resolve();
+			} catch (e) {
+				settleEnginesReady.reject(e);
+				throw e;
+			}
+		})();
+
+		return this.enginesLoading;
 	}
 
 	async unload(): Promise<void> {
+		const enginesLoading = this.enginesLoading;
+		if (enginesLoading === undefined) {
+			// the engines were never loaded, renders waiting on them keep waiting for the next load
+			return;
+		}
+
+		this.enginesLoading = undefined;
+		this.resetEnginesReady();
+
+		try {
+			await enginesLoading;
+		} catch {
+			// the error was already reported to the renders waiting on the engines
+		}
+
 		this.unloadEC();
 		this.unloadShiki();
+	}
+
+	private resetEnginesReady(): void {
+		this.enginesReady = new Promise((resolve, reject) => {
+			this.settleEnginesReady = { resolve, reject };
+		});
+		// a load error is also thrown by `loadEngines`, so it does not need to be reported when nothing is rendering yet
+		this.enginesReady.catch(() => {});
 	}
 
 	async loadCustomLanguages(): Promise<void> {
@@ -178,7 +242,7 @@ export class CodeHighlighter {
 	}
 
 	unloadShiki(): void {
-		this.shiki.dispose();
+		this.shiki?.dispose();
 	}
 
 	/**
@@ -192,6 +256,8 @@ export class CodeHighlighter {
 	 * Highlights code with EC and renders it to the passed container element.
 	 */
 	async renderWithEc(code: string, language: string, meta: string, container: HTMLElement): Promise<void> {
+		await this.enginesReady;
+
 		const result = await this.ec.render({
 			code,
 			language,
@@ -206,6 +272,9 @@ export class CodeHighlighter {
 		if (!this.obsidianSafeLanguageNames().includes(lang)) {
 			return undefined;
 		}
+
+		await this.enginesReady;
+
 		return this.shiki.codeToTokens(code, {
 			lang,
 			theme: this.themeMapper.getThemeIdentifier(),
