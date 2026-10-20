@@ -134,17 +134,26 @@ export class CodeBlock extends MarkdownRenderChild {
 		if (docLineNumber > doc.lines) {
 			return;
 		}
-		const docLine = doc.line(docLineNumber);
 
-		// account for prefixes such as list indentation or `> ` in callouts and blockquotes
-		const prefixLength = Math.max(0, fenceLine.text.search(/```|~~~/));
-		const pos = Math.min(docLine.from + Math.min(prefixLength, docLine.length) + column, docLine.to);
+		const docLine = doc.line(docLineNumber);
+		const pos = Math.min(docLine.from + column, docLine.to);
 
 		event.preventDefault();
 		event.stopPropagation();
 
-		view.dispatch({ selection: { anchor: pos }, scrollIntoView: true });
-		view.focus();
+		if (event.clientY < lines[0].getBoundingClientRect().top) {
+			view.dispatch({ selection: { anchor: pos - lineLength - 1 }, scrollIntoView: false });
+			return;
+		} else if (event.clientY > lines[lines.length - 1].getBoundingClientRect().bottom) {
+			const lineBelowCodeBlock = this.containerEl.closest<HTMLElement>('.cm-preview-code-block')?.nextElementSibling;
+			if (lineBelowCodeBlock) {
+				view.dispatch({ selection: { anchor: doc.lineAt(view.posAtDOM(lineBelowCodeBlock)).from - 1 }, scrollIntoView: false });
+			}
+
+			return;
+		}
+
+		view.dispatch({ selection: { anchor: pos }, scrollIntoView: false });
 	}
 
 	public onload(): void {
