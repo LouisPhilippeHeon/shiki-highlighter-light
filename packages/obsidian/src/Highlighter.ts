@@ -17,8 +17,8 @@ interface CustomTheme {
 	tokenColors?: Record<string, unknown>[];
 }
 
-// some languages break obsidian's `registerMarkdownCodeBlockProcessor`, so we blacklist them
-const LANGUAGE_BLACKLIST = new Set(['c++', 'c#', 'f#', 'mermaid']);
+// languages whose code blocks are rendered by Obsidian itself
+const LANGUAGE_BLACKLIST = new Set(['mermaid']);
 
 // some languages are considered "special" by shiki.isSpecialLang
 const LANGUAGE_SPECIAL = new Set(['plaintext', 'txt', 'text', 'plain', 'ansi']);
@@ -246,10 +246,10 @@ export class CodeHighlighter {
 	}
 
 	/**
-	 * All languages that are safe to use with Obsidian's `registerMarkdownCodeBlockProcessor`.
+	 * Whether the language is supported and not disabled in the settings.
 	 */
-	obsidianSafeLanguageNames(): string[] {
-		return this.supportedLanguages.filter(lang => !LANGUAGE_BLACKLIST.has(lang) && !this.plugin.loadedSettings.disabledLanguages.includes(lang));
+	isLanguageEnabled(lang: string): boolean {
+		return this.supportedLanguages.includes(lang) && !LANGUAGE_BLACKLIST.has(lang) && !this.plugin.loadedSettings.disabledLanguages.includes(lang);
 	}
 
 	/**
@@ -269,7 +269,7 @@ export class CodeHighlighter {
 	}
 
 	async getHighlightTokens(code: string, lang: string): Promise<TokensResult | undefined> {
-		if (!this.obsidianSafeLanguageNames().includes(lang)) {
+		if (!this.isLanguageEnabled(lang)) {
 			return undefined;
 		}
 

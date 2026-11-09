@@ -1,5 +1,6 @@
-import { debounce, loadPrism, Plugin, TFile, type MarkdownPostProcessor } from 'obsidian';
+import { debounce, loadPrism, Plugin } from 'obsidian';
 import { CodeBlock } from 'packages/obsidian/src/CodeBlock';
+import { getCodeElementLanguage } from 'packages/obsidian/src/CodeBlockMeta';
 import { createCm6Plugin } from 'packages/obsidian/src/codemirror/Cm6_ViewPlugin';
 import { DEFAULT_SETTINGS, type Settings } from 'packages/obsidian/src/settings/Settings';
 import { ShikiSettingsTab } from 'packages/obsidian/src/settings/SettingsTab';
@@ -21,8 +22,6 @@ export default class ShikiPlugin extends Plugin {
 	loadedSettings!: Settings;
 	updateCm6Plugin!: () => Promise<void>;
 
-	codeBlockProcessors: MarkdownPostProcessor[] = [];
-
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.loadedSettings = structuredClone(this.settings);
@@ -39,26 +38,9 @@ export default class ShikiPlugin extends Plugin {
 		this.activeCodeBlocks = new Map();
 
 		this.registerInlineCodeProcessor();
-		this.registerCodeBlockProcessors();
+		this.registerCodeBlockProcessor();
 
 		this.registerEditorExtension([createCm6Plugin(this)]);
-
-		// this is a workaround for the fact that obsidian does not rerender the code block
-		// when the start line with the language changes, and we need that for the EC meta string
-		this.registerEvent(
-			this.app.vault.on('modify', async file => {
-				// sleep 0 so that the code block context is updated before we rerender
-				await sleep(100);
-
-				if (file instanceof TFile) {
-					if (this.activeCodeBlocks.has(file.path)) {
-						for (const codeBlock of this.activeCodeBlocks.get(file.path)!) {
-							void codeBlock.rerenderOnNoteChange();
-						}
-					}
-				}
-			}),
-		);
 
 		const debouncedReload = debounce(
 			() => {
@@ -107,29 +89,41 @@ export default class ShikiPlugin extends Plugin {
 		filterHighlightAll?.reject.addSelector('div.expressive-code pre code');
 	}
 
-	registerCodeBlockProcessors(): void {
-		const languages = this.highlighter.obsidianSafeLanguageNames();
+	/**
+	 * Highlights the code blocks of rendered markdown, e.g. in reading mode or PDF export.
+	 * In the editor, Obsidian's native code blocks are kept and highlighted by the editor extension instead.
+	 */
+	registerCodeBlockProcessor(): void {
+		this.registerMarkdownPostProcessor(async (el, ctx) => {
+			const renders: Promise<void>[] = [];
 
-		for (const language of languages) {
-			try {
-				this.registerMarkdownCodeBlockProcessor(
-					language,
-					async (source, el, ctx) => {
-						// we need to avoid making the hidden frontmatter code block visible
-						if (el.parentElement?.classList.contains('mod-frontmatter')) {
-							return;
-						}
+			for (const codeEl of el.findAll('pre > code')) {
+				const preEl = codeEl.parentElement!;
+				// we need to avoid making the hidden frontmatter code block visible
+				if (preEl.classList.contains('frontmatter') || preEl.closest('.mod-frontmatter') !== null) {
+					continue;
+				}
 
-						const codeBlock = new CodeBlock(this, el, source, language, ctx);
+				const language = getCodeElementLanguage(codeEl)?.toLowerCase();
+				if (language === undefined || !this.highlighter.isLanguageEnabled(language)) {
+					continue;
+				}
 
-						ctx.addChild(codeBlock);
-					},
-					1000,
+				// Obsidian keeps the trailing newline of the code block in the code element
+				const source = (codeEl.textContent ?? '').replace(/\n$/, '');
+				const codeBlock = new CodeBlock(this, el, preEl, source, language, ctx);
+				ctx.addChild(codeBlock);
+
+				renders.push(
+					codeBlock.render().catch((e: unknown) => {
+						console.error(`Failed to render ${language} code block.`, e);
+					}),
 				);
-			} catch (e) {
-				console.warn(`Failed to register code block processor for ${language}.`, e);
 			}
-		}
+
+			// returning the promise lets Obsidian wait for the code blocks, e.g. when exporting to PDF
+			await Promise.all(renders);
+		});
 	}
 
 	registerInlineCodeProcessor(): void {
@@ -175,6 +169,9 @@ export default class ShikiPlugin extends Plugin {
 
 	async loadSettings(): Promise<void> {
 		this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData()) as Settings;
+
+		// code block frames are no longer supported
+		delete (this.settings as unknown as Record<string, unknown>).ecDefaultFrame;
 
 		// migrate the theme to darkTheme and lightTheme
 		if (this.settings.theme !== undefined) {

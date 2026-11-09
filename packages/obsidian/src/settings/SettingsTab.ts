@@ -2,7 +2,6 @@ import { PluginSettingTab, Setting, Platform, Notice, normalizePath } from 'obsi
 import type ShikiPlugin from 'packages/obsidian/src/main';
 import { StringSelectModal } from 'packages/obsidian/src/settings/StringSelectModal';
 import { OBSIDIAN_THEME_IDENTIFIER } from 'packages/obsidian/src/themes/ThemeMapper';
-import { FrameType } from 'packages/obsidian/src/settings/Settings';
 
 export class ShikiSettingsTab extends PluginSettingTab {
 	plugin: ShikiPlugin;
@@ -43,7 +42,7 @@ export class ShikiSettingsTab extends PluginSettingTab {
 				});
 			});
 
-		new Setting(this.containerEl).setName('EC defaults').setHeading();
+		new Setting(this.containerEl).setName('Code block defaults').setHeading();
 
 		new Setting(this.containerEl)
 			.setName('Show line numbers')
@@ -57,26 +56,10 @@ export class ShikiSettingsTab extends PluginSettingTab {
 
 		new Setting(this.containerEl)
 			.setName('Wrap')
-			.setDesc('Controls whether code block lines wrap by default.')
+			.setDesc('Controls whether code block lines wrap by default in reading mode. In the editor, code blocks follow the editor line wrapping.')
 			.addToggle(toggle => {
 				toggle.setValue(this.plugin.settings.ecDefaultWrap).onChange(async value => {
 					this.plugin.settings.ecDefaultWrap = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl)
-			.setName('Frame')
-			.setDesc('Controls the default frame type for code blocks.')
-			.addDropdown(dropdown => {
-				dropdown.addOptions({
-					[FrameType.Code]: 'Code',
-					[FrameType.Terminal]: 'Terminal',
-					[FrameType.None]: 'None',
-					[FrameType.Auto]: 'Auto',
-				});
-				dropdown.setValue(this.plugin.settings.ecDefaultFrame).onChange(async value => {
-					this.plugin.settings.ecDefaultFrame = value as FrameType;
 					await this.plugin.saveSettings();
 				});
 			});

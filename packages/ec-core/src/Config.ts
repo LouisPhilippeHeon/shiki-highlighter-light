@@ -1,6 +1,5 @@
 import { ExpressiveCodeTheme, type ExpressiveCodeEngineConfig } from '@expressive-code/core';
 import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-sections';
-import { pluginFrames } from '@expressive-code/plugin-frames';
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers';
 import { pluginShiki } from '@expressive-code/plugin-shiki';
 import { pluginTextMarkers } from '@expressive-code/plugin-text-markers';
@@ -12,7 +11,6 @@ export interface EcSettingsProps {
 	preferThemeColors: boolean;
 	ecDefaultShowLineNumbers: boolean;
 	ecDefaultWrap: boolean;
-	ecDefaultFrame: 'code' | 'terminal' | 'none' | 'auto';
 }
 
 export interface EcConfigInput {
@@ -31,7 +29,6 @@ export const EC_VIRTUAL_SETTINGS: EcSettingsProps = {
 	preferThemeColors: true,
 	ecDefaultShowLineNumbers: false,
 	ecDefaultWrap: false,
-	ecDefaultFrame: 'auto',
 };
 
 export function createCssVariableThemeBundle(theme: ThemeRegistration): CssVariableThemeBundle {
@@ -99,7 +96,6 @@ export function createEcEngineConfig(input: EcConfigInput): ExpressiveCodeEngine
 			pluginCollapsibleSections(),
 			pluginTextMarkers(),
 			pluginLineNumbers(),
-			pluginFrames(),
 		],
 		styleOverrides: getECTheme(useThemeColors),
 		minSyntaxHighlightingColorContrast: 0,
@@ -107,7 +103,6 @@ export function createEcEngineConfig(input: EcConfigInput): ExpressiveCodeEngine
 		defaultProps: {
 			showLineNumbers: input.settings.ecDefaultShowLineNumbers,
 			wrap: input.settings.ecDefaultWrap,
-			frame: input.settings.ecDefaultFrame,
 		},
 	};
 }

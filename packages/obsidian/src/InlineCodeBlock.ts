@@ -29,10 +29,6 @@ export class InlineCodeBlock extends MarkdownRenderChild {
 		this.plugin.highlighter.renderTokens(tokens, this.containerEl);
 	}
 
-	public async rerenderOnNoteChange(): Promise<void> {
-		// noop for inline code blocks
-	}
-
 	public async forceRerender(): Promise<void> {
 		await this.render();
 	}

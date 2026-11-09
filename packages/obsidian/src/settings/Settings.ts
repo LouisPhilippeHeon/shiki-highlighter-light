@@ -1,12 +1,5 @@
 import { OBSIDIAN_THEME_IDENTIFIER } from 'packages/obsidian/src/themes/ThemeMapper';
 
-export enum FrameType {
-	Code = 'code',
-	Terminal = 'terminal',
-	None = 'none',
-	Auto = 'auto',
-}
-
 export interface Settings {
 	disabledLanguages: string[];
 	customThemeFolder: string;
@@ -21,7 +14,6 @@ export interface Settings {
 	inlineHighlighting: boolean;
 	ecDefaultShowLineNumbers: boolean;
 	ecDefaultWrap: boolean;
-	ecDefaultFrame: FrameType;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -35,5 +27,4 @@ export const DEFAULT_SETTINGS: Settings = {
 	inlineHighlighting: true,
 	ecDefaultShowLineNumbers: false,
 	ecDefaultWrap: false,
-	ecDefaultFrame: FrameType.Auto,
 };

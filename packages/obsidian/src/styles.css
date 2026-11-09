@@ -24,27 +24,10 @@ body {
 	--shiki-highlight-green-background: rgba(var(--color-green-rgb), 0.1);
 	--shiki-highlight-neutral-background: rgba(var(--mono-rgb-100), 0.05);
 
-	--shiki-terminal-dots-color: var(--text-faint);
-
-	--shiki-tooltip-background: var(--background-modifier-message);
-	--shiki-tooltip-text-color: #fafafa;
-
 	--shiki-gutter-border-color: var(--background-modifier-border);
 	--shiki-gutter-border-width: var(--border-width);
 	--shiki-gutter-text-color: var(--text-faint);
 	--shiki-gutter-text-color-highlight: var(--shiki-code-normal);
-
-	--shiki-active-tab-border-width: 2px;
-	--shiki-active-tab-border-color: var(--shiki-highlight-neutral);
-}
-
-/* Clicking a code block in live preview places the cursor in it, so the edit button is not needed */
-.cm-embed-block:has(div.expressive-code) .edit-block-button {
-	display: none;
-}
-
-.cm-embed-block div.expressive-code pre {
-	cursor: text;
 }
 
 div.expressive-code {
@@ -52,24 +35,9 @@ div.expressive-code {
 	font-variant-ligatures: unset !important;
 	tab-size: 4ch;
 
-	&>figure>pre {
+	& > pre {
 		/* Fix for shimmering focus */
 		margin: 0 !important;
-	}
-
-	&>figure.frame {
-		&.has-title>figcaption.header::before {
-			pointer-events: all !important;
-		}
-
-		&>figcaption.header {
-			z-index: unset;
-		}
-
-		&>div.copy {
-			/* Move the copy button to the bottom right */
-			inset-block-end: calc(var(--ec-brdWd) + var(--ec-uiPadInl) / 2);
-		}
 	}
 
 	/* Remove padding at the end for the copy button */
@@ -78,10 +46,10 @@ div.expressive-code {
 	}
 
 	/* Fix a bug where plain text files could have low contrast */
-	[data-language="text"],
-	[data-language="txt"],
-	[data-language="plain"] {
-		.code>span {
+	[data-language='text'],
+	[data-language='txt'],
+	[data-language='plain'] {
+		.code > span {
 			color: var(--shiki-code-normal);
 		}
 	}
@@ -94,7 +62,7 @@ div.expressive-code {
 }
 
 /* Hide the frontmatter code block in reading view again */
-div.markdown-preview-view>div>div.mod-header+div>div.block-language-yaml.shiki-hide-in-reading-mode {
+div.markdown-preview-view > div > div.mod-header + div > div.block-language-yaml.shiki-hide-in-reading-mode {
 	display: none;
 }
 
@@ -116,7 +84,7 @@ span.shiki-ul {
 }
 
 /* Wrap */
-.expressive-code pre[style*="--ecMaxLine"] {
+.expressive-code pre[style*='--ecMaxLine'] {
 	--ecMaxLine: 0px !important;
 
 	.code:has(span) {
@@ -127,7 +95,7 @@ span.shiki-ul {
 		text-indent: -2ch !important;
 	}
 
-	.code>.indent {
+	.code > .indent {
 		display: table-cell;
 		width: 0;
 		white-space: pre;
@@ -150,7 +118,7 @@ span.shiki-ul {
 			text-indent: -2ch !important;
 		}
 
-		.code>.indent {
+		.code > .indent {
 			display: table-cell;
 			width: 0;
 			white-space: pre;
@@ -163,14 +131,90 @@ td .shiki-inline {
 	white-space-collapse: preserve;
 }
 
-/* Shiki code blocks have the same padding as native code blocks in preview mode */
-.markdown-source-view .expressive-code {
-	code {
-		padding: 0;
+/* Reading mode code blocks */
+.shiki-code-block {
+	position: relative;
+
+	& > .shiki-copy-button {
+		position: absolute;
+		inset-block-start: var(--size-4-1);
+		inset-inline-end: var(--size-4-1);
+		display: flex;
+		padding: var(--size-4-1);
+		height: auto;
+		color: var(--text-muted);
+		background: var(--shiki-code-background);
+		box-shadow: none;
+		opacity: 0;
+		transition: opacity 0.1s;
+
+		&:hover {
+			color: var(--text-normal);
+		}
 	}
 
-	code::before,
-	code::after {
-		content: " ";
+	&:hover > .shiki-copy-button,
+	& > .shiki-copy-button:focus-visible {
+		opacity: 1;
 	}
+}
+
+@media print {
+	.shiki-code-block > .shiki-copy-button {
+		display: none;
+	}
+}
+
+/*
+ * Editor code blocks
+ * Obsidian's own highlighting is still applied, so its colors are overridden by the shiki tokens they are nested in or wrap.
+ */
+.cm-line .shiki-token {
+	font-style: normal;
+
+	&.shiki-italic {
+		font-style: italic;
+	}
+
+	& * {
+		color: inherit !important;
+		font-style: inherit !important;
+		font-weight: inherit !important;
+	}
+}
+
+.cm-line.shiki-line-number::before {
+	content: attr(data-shiki-line-number);
+	display: inline-block;
+	box-sizing: content-box;
+	min-width: var(--shiki-line-number-width, 1ch);
+	margin-inline-end: var(--size-4-3);
+	padding-inline-end: var(--size-4-2);
+	border-inline-end: var(--shiki-gutter-border-width) solid var(--shiki-gutter-border-color);
+	color: var(--shiki-gutter-text-color);
+	text-align: end;
+	user-select: none;
+	pointer-events: none;
+}
+
+.cm-line.shiki-line-mark,
+.cm-line.shiki-line-ins,
+.cm-line.shiki-line-del {
+	background-image: linear-gradient(var(--shiki-line-marker-background), var(--shiki-line-marker-background));
+	box-shadow: inset 0.15rem 0 0 var(--shiki-line-marker-border);
+}
+
+.cm-line.shiki-line-mark {
+	--shiki-line-marker-background: var(--shiki-highlight-neutral-background);
+	--shiki-line-marker-border: var(--shiki-highlight-neutral);
+}
+
+.cm-line.shiki-line-ins {
+	--shiki-line-marker-background: var(--shiki-highlight-green-background);
+	--shiki-line-marker-border: var(--shiki-highlight-green);
+}
+
+.cm-line.shiki-line-del {
+	--shiki-line-marker-background: var(--shiki-highlight-red-background);
+	--shiki-line-marker-border: var(--shiki-highlight-red);
 }

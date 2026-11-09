@@ -2,9 +2,9 @@
 
 This plugin integrates [shiki](https://shiki.style/) via [Expressive Code](https://expressive-code.com/) into Obsidian, providing better syntax highlighting for over 100 languages.
 
-This plugin works in reading, live preview and edit mode, providing a consistent experience across the app.
+This plugin works in reading, live preview and source mode. In the editor, Obsidian's native code blocks are kept, so editing, selecting and scrolling work just like without the plugin, only the highlighting is done by Shiki. In reading mode and PDF exports, code blocks are rendered with Expressive Code.
 
-Below is an example with line numbers, a custom header, and line highlighting.
+Below is an example with line numbers and line highlighting.
 
 ![exampleImage](https://raw.githubusercontent.com/mProjectsCode/obsidian-shiki-plugin/master/exampleImage.png)
 
@@ -48,22 +48,14 @@ some code ...
 
 More info on the configuration options can be found on the [Expressive Code homepage](https://expressive-code.com/).
 
+Line numbers, line highlighting and diff highlighting via `ins` and `del` work everywhere. All other options, e.g. text markers and collapsible sections, only apply in reading mode.
+
 ### Line Numbers
 
 Line numbers can be enabled with `showLineNumbers`.
 
 ````md
 ```language showLineNumbers
-some code ...
-```
-````
-
-### Title
-
-A title can be added with `title="Title Here"`.
-
-````md
-```language title="Title Here"
 some code ...
 ```
 ````
@@ -91,7 +83,7 @@ some code ...
 ```
 ````
 
-When the language is set to `diff`, the plugin will automatically enable diff highlighting for lines either prefixed by `+` or `-`.
+When the language is set to `diff`, the plugin will automatically enable diff highlighting for lines either prefixed by `+` or `-` in reading mode.
 
 ## License
 
