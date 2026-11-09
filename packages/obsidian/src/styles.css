@@ -183,13 +183,31 @@ td .shiki-inline {
 	}
 }
 
+/*
+ * The gutter is reserved with padding on top of Obsidian's own padding, so that wrapped lines start after it as well.
+ * The line number spans the full height of the line, so the gutter border continues next to wrapped lines.
+ */
+.markdown-source-view.mod-cm6 .cm-content > .cm-line.HyperMD-codeblock.shiki-line-number {
+	--shiki-gutter-width: calc(var(--size-4-3) + var(--shiki-line-number-width, 1ch) + var(--size-4-2) + var(--shiki-gutter-border-width));
+	--shiki-line-padding: 0px;
+
+	position: relative;
+	padding-inline-start: calc(var(--shiki-gutter-width) + var(--shiki-line-padding));
+
+	/* matches Obsidian's padding of code block lines, list lines are indented by their text instead */
+	&:not(.HyperMD-list-line) {
+		--shiki-line-padding: var(--size-4-4);
+	}
+}
+
 .cm-line.shiki-line-number::before {
 	content: attr(data-shiki-line-number);
-	display: inline-block;
-	box-sizing: content-box;
-	min-width: var(--shiki-line-number-width, 1ch);
-	margin-inline-end: var(--size-4-3);
-	padding-inline-end: var(--size-4-2);
+	position: absolute;
+	inset-block: 0;
+	inset-inline-start: 0;
+	box-sizing: border-box;
+	width: var(--shiki-gutter-width);
+	padding-inline: var(--size-4-3) var(--size-4-2);
 	border-inline-end: var(--shiki-gutter-border-width) solid var(--shiki-gutter-border-color);
 	color: var(--shiki-gutter-text-color);
 	text-align: end;
