@@ -173,13 +173,6 @@ export default class ShikiPlugin extends Plugin {
 		// code block frames are no longer supported
 		delete (this.settings as unknown as Record<string, unknown>).ecDefaultFrame;
 
-		// migrate the theme to darkTheme and lightTheme
-		if (this.settings.theme !== undefined) {
-			this.settings.darkTheme = this.settings.theme;
-			this.settings.lightTheme = this.settings.theme;
-			this.settings.theme = undefined;
-		}
-
 		// bundled shiki themes are no longer included, so fall back to the default theme for anything that is not a custom theme
 		if (this.settings.darkTheme !== OBSIDIAN_THEME_IDENTIFIER && !this.settings.darkTheme.endsWith('.json')) {
 			this.settings.darkTheme = DEFAULT_SETTINGS.darkTheme;

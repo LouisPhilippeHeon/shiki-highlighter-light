@@ -4,10 +4,6 @@ export interface Settings {
 	disabledLanguages: string[];
 	customThemeFolder: string;
 	customLanguageFolder: string;
-	/**
-	 * Old theme setting, from before we had separate light/dark theme settings. Will me migrated on load.
-	 */
-	theme: string | undefined;
 	darkTheme: string;
 	lightTheme: string;
 	preferThemeColors: boolean;
@@ -20,7 +16,6 @@ export const DEFAULT_SETTINGS: Settings = {
 	disabledLanguages: [],
 	customThemeFolder: '',
 	customLanguageFolder: '',
-	theme: undefined,
 	darkTheme: OBSIDIAN_THEME_IDENTIFIER,
 	lightTheme: OBSIDIAN_THEME_IDENTIFIER,
 	preferThemeColors: true,
