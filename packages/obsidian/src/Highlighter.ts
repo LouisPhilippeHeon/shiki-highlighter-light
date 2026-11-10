@@ -9,10 +9,13 @@ import { toDom } from 'hast-util-to-dom';
 import { createEcEngineConfig } from 'packages/ec-core/src/Config';
 import BUNDLED_LANGUAGE_ALIASES from 'virtual:shiki-lang-aliases';
 
-interface CustomTheme {
+interface CustomThemeInfo {
 	name: string;
 	displayName: string;
 	type: string;
+}
+
+interface CustomTheme extends CustomThemeInfo {
 	colors?: Record<string, unknown>[];
 	tokenColors?: Record<string, unknown>[];
 }
@@ -31,8 +34,17 @@ export class CodeHighlighter {
 	ecStyleElement: HTMLElement | undefined;
 	supportedLanguages!: string[];
 	shiki!: HighlighterCore;
+	/**
+	 * The custom themes that are selected in the settings. The other ones are only read for the settings tab.
+	 */
 	customThemes!: CustomTheme[];
+	/**
+	 * The names of all custom themes, for the settings tab. They are read after the engines are loaded, so that
+	 * unused themes do not slow down startup. Undefined until then.
+	 */
+	customThemeInfos: CustomThemeInfo[] | undefined;
 	customLanguages!: LanguageRegistration[];
+	private customThemeFiles: string[] = [];
 
 	// the custom theme and language files, which are cheap to load and needed to register the code block processors
 	private customFilesLoading: Promise<void> | undefined;
@@ -78,13 +90,14 @@ export class CodeHighlighter {
 			const settleEnginesReady = this.settleEnginesReady;
 			try {
 				await this.customFilesLoading;
-				await this.loadEC();
-				await this.loadShiki();
+				await Promise.all([this.loadEC(), this.loadShiki()]);
 				settleEnginesReady.resolve();
 			} catch (e) {
 				settleEnginesReady.reject(e);
 				throw e;
 			}
+
+			void this.loadCustomThemeInfos();
 		})();
 
 		return this.enginesLoading;
@@ -156,36 +169,35 @@ export class CodeHighlighter {
 	async loadCustomThemes(): Promise<void> {
 		const activeTheme = this.themeMapper.getThemeIdentifier();
 		this.customThemes = [];
+		this.customThemeInfos = undefined;
+		this.customThemeFiles = [];
 
 		// custom themes are disabled unless users specify a folder for them in plugin settings
 		if (!this.plugin.loadedSettings.customThemeFolder) return;
 
 		const themeFolder = normalizePath(this.plugin.loadedSettings.customThemeFolder);
 		if (!(await this.plugin.app.vault.adapter.exists(themeFolder))) {
-			new Notice(`${this.plugin.manifest.name}\nUnable to open custom themes folder: ${themeFolder}`, 5000);
+			new Notice(
+				`${this.plugin.manifest.name}
+Unable to open custom themes folder: ${themeFolder}`,
+				5000,
+			);
 			return;
 		}
 
 		const themeList = await this.plugin.app.vault.adapter.list(themeFolder);
-		const themeFiles = themeList.files.filter(f => f.toLowerCase().endsWith('.json'));
+		this.customThemeFiles = themeList.files.filter(f => f.toLowerCase().endsWith('.json'));
 
-		for (const themeFile of themeFiles) {
-			const baseName = themeFile.substring(`${themeFolder}/`.length);
-			try {
-				const theme = JSON.parse(await this.plugin.app.vault.adapter.read(themeFile)) as CustomTheme;
-				// validate that theme file JSON can be parsed and contains colors at a minimum
-				if (!theme.colors && !theme.tokenColors) {
-					throw Error('Invalid JSON theme file.');
-				}
-				// what metadata is available in the theme file depends on how it was created
-				theme.displayName = theme.displayName ?? theme.name ?? baseName;
-				theme.name = baseName.toLowerCase();
-				theme.type = theme.type ?? 'both';
+		// only the selected themes are needed for highlighting
+		const selectedThemes = new Set([this.plugin.loadedSettings.darkTheme, this.plugin.loadedSettings.lightTheme]);
+		for (const themeFile of this.customThemeFiles) {
+			if (!selectedThemes.has(this.getCustomThemeName(themeFile))) {
+				continue;
+			}
 
+			const theme = await this.readCustomTheme(themeFile);
+			if (theme !== undefined) {
 				this.customThemes.push(theme);
-			} catch (e) {
-				new Notice(`${this.plugin.manifest.name}\nUnable to load custom theme: ${themeFile}`, 5000);
-				console.warn(`Unable to load custom theme: ${themeFile}`, e);
 			}
 		}
 
@@ -202,15 +214,72 @@ export class CodeHighlighter {
 
 			await this.plugin.saveSettings();
 		}
+	}
 
-		this.customThemes.sort((a, b) => a.displayName.localeCompare(b.displayName));
+	/**
+	 * Reads the names of all custom themes for the settings tab. Only the names are kept, so that the colors of unused themes do not take up memory.
+	 */
+	async loadCustomThemeInfos(): Promise<void> {
+		const themeFiles = this.customThemeFiles;
+		const infos: CustomThemeInfo[] = [];
+
+		for (const themeFile of themeFiles) {
+			const name = this.getCustomThemeName(themeFile);
+			const theme = this.customThemes.find(t => t.name === name) ?? (await this.readCustomTheme(themeFile));
+			if (theme !== undefined) {
+				infos.push({ name: theme.name, displayName: theme.displayName, type: theme.type });
+			}
+		}
+
+		// the custom themes were reloaded in the meantime
+		if (themeFiles !== this.customThemeFiles) {
+			return;
+		}
+
+		infos.sort((a, b) => a.displayName.localeCompare(b.displayName));
+		this.customThemeInfos = infos;
+	}
+
+	/**
+	 * The name of a custom theme is its file name, which is what the settings store.
+	 */
+	private getCustomThemeName(themeFile: string): string {
+		const themeFolder = normalizePath(this.plugin.loadedSettings.customThemeFolder);
+		return themeFile.substring(`${themeFolder}/`.length).toLowerCase();
+	}
+
+	private async readCustomTheme(themeFile: string): Promise<CustomTheme | undefined> {
+		const themeFolder = normalizePath(this.plugin.loadedSettings.customThemeFolder);
+		const baseName = themeFile.substring(`${themeFolder}/`.length);
+		try {
+			const theme = JSON.parse(await this.plugin.app.vault.adapter.read(themeFile)) as CustomTheme;
+			// validate that theme file JSON can be parsed and contains colors at a minimum
+			if (!theme.colors && !theme.tokenColors) {
+				throw Error('Invalid JSON theme file.');
+			}
+			// what metadata is available in the theme file depends on how it was created
+			theme.displayName = theme.displayName ?? theme.name ?? baseName;
+			theme.name = baseName.toLowerCase();
+			theme.type = theme.type ?? 'both';
+
+			return theme;
+		} catch (e) {
+			new Notice(
+				`${this.plugin.manifest.name}
+Unable to load custom theme: ${themeFile}`,
+				5000,
+			);
+			console.warn(`Unable to load custom theme: ${themeFile}`, e);
+			return undefined;
+		}
 	}
 
 	async loadEC(): Promise<void> {
 		this.ec = new ExpressiveCodeEngine(
 			createEcEngineConfig({
 				theme: await this.themeMapper.getThemeForEC(),
-				customLanguages: this.customLanguages,
+				// EC highlights with our highlighter, so the grammars are only loaded once
+				getHighlighter: () => this.shiki,
 				settings: this.plugin.loadedSettings,
 				usingObsidianTheme: this.themeMapper.usingObsidianTheme(),
 			}),

@@ -17,7 +17,9 @@ export class ShikiSettingsTab extends PluginSettingTab {
 	}
 
 	getSettingDefinitions(): SettingDefinitionItem<SettingsKey>[] {
-		const customThemes = Object.fromEntries(this.plugin.highlighter.customThemes.map(theme => [theme.name, `${theme.displayName} (${theme.type})`]));
+		// the names of all custom themes are read after startup, until then only the selected ones are known
+		const customThemeInfos = this.plugin.highlighter.customThemeInfos ?? this.plugin.highlighter.customThemes;
+		const customThemes = Object.fromEntries(customThemeInfos.map(theme => [theme.name, `${theme.displayName} (${theme.type})`]));
 		const themes = {
 			[OBSIDIAN_THEME_IDENTIFIER]: 'Obsidian built-in (both)',
 			...customThemes,

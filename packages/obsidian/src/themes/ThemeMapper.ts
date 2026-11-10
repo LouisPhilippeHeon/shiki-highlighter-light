@@ -5,16 +5,24 @@ import type ShikiPlugin from 'packages/obsidian/src/main';
 
 export const OBSIDIAN_THEME_IDENTIFIER = 'obsidian-theme';
 
+// the placeholder colors created by `mapColor`
+const PLACEHOLDER_COLOR_REGEX = /#[0-9A-F]{6}/g;
+
 export class ThemeMapper {
 	plugin: ShikiPlugin;
 	mapCounter: number;
 	mapping: Map<string, string>;
+	/**
+	 * The reverse of `mapping`, from placeholder color to the original color or CSS variable.
+	 */
+	reverseMapping: Map<string, string>;
 
 	constructor(plugin: ShikiPlugin) {
 		this.plugin = plugin;
 
 		this.mapCounter = 0;
 		this.mapping = new Map();
+		this.reverseMapping = new Map();
 	}
 
 	async getThemeForEC(): Promise<ThemeRegistration> {
@@ -81,6 +89,7 @@ export class ThemeMapper {
 			const newColor = `#${this.mapCounter.toString(16).padStart(6, '0').toUpperCase()}`;
 			this.mapCounter += 1;
 			this.mapping.set(color, newColor);
+			this.reverseMapping.set(newColor, color);
 			return newColor;
 		}
 	}
@@ -106,11 +115,8 @@ export class ThemeMapper {
 
 	private fixNode(node: hast_types.Element): hast_types.Element {
 		if (node.properties?.style) {
-			let style = node.properties.style as string;
-			for (const [key, value] of this.mapping) {
-				style = style.replaceAll(value, key);
-			}
-			node.properties.style = style;
+			// a single pass over the style, instead of one per mapped color
+			node.properties.style = (node.properties.style as string).replace(PLACEHOLDER_COLOR_REGEX, match => this.reverseMapping.get(match) ?? match);
 		}
 
 		for (const child of node.children) {

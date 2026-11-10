@@ -53,7 +53,8 @@ function expressiveCodeBundlePlugin() {
 				const ec = new ExpressiveCodeEngine(
 					createEcEngineConfig({
 						theme: cssVariableTheme.theme,
-						customLanguages: [],
+						// only the base styles and scripts are generated here, nothing gets highlighted
+						getHighlighter: () => undefined,
 						settings: EC_VIRTUAL_SETTINGS,
 						usingObsidianTheme: true,
 					}),

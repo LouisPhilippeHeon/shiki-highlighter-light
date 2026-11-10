@@ -1,11 +1,12 @@
 import { ExpressiveCodeTheme, type ExpressiveCodeEngineConfig } from '@expressive-code/core';
 import { pluginCollapsibleSections } from '@expressive-code/plugin-collapsible-sections';
 import { pluginLineNumbers } from '@expressive-code/plugin-line-numbers';
-import { pluginShiki } from '@expressive-code/plugin-shiki';
 import { pluginTextMarkers } from '@expressive-code/plugin-text-markers';
-import { type LanguageRegistration, type ThemeRegistration } from 'shiki';
+import { type HighlighterCore, type ThemeRegistration } from 'shiki/core';
 // eslint-disable-next-line no-relative-import-paths/no-relative-import-paths -- needed for vite to load this correctly
 import { getECTheme } from './ECTheme';
+// eslint-disable-next-line no-relative-import-paths/no-relative-import-paths -- needed for vite to load this correctly
+import { pluginSharedShiki } from './SharedShikiPlugin';
 
 export interface EcSettingsProps {
 	preferThemeColors: boolean;
@@ -15,7 +16,10 @@ export interface EcSettingsProps {
 
 export interface EcConfigInput {
 	theme: ThemeRegistration;
-	customLanguages: LanguageRegistration[];
+	/**
+	 * Returns the highlighter with the languages loaded, it is only called while rendering code blocks.
+	 */
+	getHighlighter: () => HighlighterCore | undefined;
 	settings: EcSettingsProps;
 	usingObsidianTheme: boolean;
 }
@@ -89,14 +93,7 @@ export function createEcEngineConfig(input: EcConfigInput): ExpressiveCodeEngine
 
 	return {
 		themes: [new ExpressiveCodeTheme(input.theme)],
-		plugins: [
-			pluginShiki({
-				langs: input.customLanguages,
-			}),
-			pluginCollapsibleSections(),
-			pluginTextMarkers(),
-			pluginLineNumbers(),
-		],
+		plugins: [pluginSharedShiki(input.getHighlighter), pluginCollapsibleSections(), pluginTextMarkers(), pluginLineNumbers()],
 		styleOverrides: getECTheme(useThemeColors),
 		minSyntaxHighlightingColorContrast: 0,
 		themeCssRoot: 'div.expressive-code',
