@@ -79,10 +79,6 @@ span.shiki-ul {
 }
 
 /* Settings tab  */
-.setting-item-control input.shiki-custom-theme-folder {
-	min-width: 250px;
-}
-
 /* Wrap */
 .expressive-code pre[style*='--ecMaxLine'] {
 	--ecMaxLine: 0px !important;

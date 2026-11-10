@@ -1,7 +1,11 @@
-import { PluginSettingTab, Setting, Platform, Notice, normalizePath } from 'obsidian';
+import type { ExtraButtonComponent, SettingDefinitionItem } from 'obsidian';
+import { PluginSettingTab, Platform, Notice, normalizePath } from 'obsidian';
 import type ShikiPlugin from 'packages/obsidian/src/main';
+import type { Settings } from 'packages/obsidian/src/settings/Settings';
 import { StringSelectModal } from 'packages/obsidian/src/settings/StringSelectModal';
 import { OBSIDIAN_THEME_IDENTIFIER } from 'packages/obsidian/src/themes/ThemeMapper';
+
+type SettingsKey = keyof Settings;
 
 export class ShikiSettingsTab extends PluginSettingTab {
 	plugin: ShikiPlugin;
@@ -12,179 +16,135 @@ export class ShikiSettingsTab extends PluginSettingTab {
 		this.plugin = plugin;
 	}
 
-	display(): void {
-		this.containerEl.empty();
-
+	getSettingDefinitions(): SettingDefinitionItem<SettingsKey>[] {
 		const customThemes = Object.fromEntries(this.plugin.highlighter.customThemes.map(theme => [theme.name, `${theme.displayName} (${theme.type})`]));
 		const themes = {
 			[OBSIDIAN_THEME_IDENTIFIER]: 'Obsidian built-in (both)',
 			...customThemes,
 		};
 
-		new Setting(this.containerEl).setName('All setting changes require a reload of the highlighter').addButton(button => {
-			button
-				.setCta()
-				.setButtonText('Reload Highlighter')
-				.onClick(async () => {
-					button.setDisabled(true);
-					await this.plugin.reloadHighlighter();
-					button.setDisabled(false);
-				});
-		});
-
-		new Setting(this.containerEl)
-			.setName('Inline Syntax Highlighting')
-			.setDesc('Enables syntax highlighting for inline code blocks via `{lang} code`.')
-			.addToggle(toggle => {
-				toggle.setValue(this.plugin.settings.inlineHighlighting).onChange(async value => {
-					this.plugin.settings.inlineHighlighting = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl).setName('Code block defaults').setHeading();
-
-		new Setting(this.containerEl)
-			.setName('Show line numbers')
-			.setDesc('Controls whether line numbers are shown by default.')
-			.addToggle(toggle => {
-				toggle.setValue(this.plugin.settings.ecDefaultShowLineNumbers).onChange(async value => {
-					this.plugin.settings.ecDefaultShowLineNumbers = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl)
-			.setName('Wrap')
-			.setDesc('Controls whether code block lines wrap by default in reading mode. In the editor, code blocks follow the editor line wrapping.')
-			.addToggle(toggle => {
-				toggle.setValue(this.plugin.settings.ecDefaultWrap).onChange(async value => {
-					this.plugin.settings.ecDefaultWrap = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl).setName('Theme').setHeading();
-
-		new Setting(this.containerEl)
-			.setName('Dark theme')
-			.setDesc("The theme for code blocks when Obsidian's base color scheme is dark.")
-			.addDropdown(dropdown => {
-				dropdown.addOptions(themes);
-				dropdown.setValue(this.plugin.settings.darkTheme).onChange(async value => {
-					this.plugin.settings.darkTheme = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl)
-			.setName('Light theme')
-			.setDesc("The theme for code blocks when Obsidian's base color scheme is light.")
-			.addDropdown(dropdown => {
-				dropdown.addOptions(themes);
-				dropdown.setValue(this.plugin.settings.lightTheme).onChange(async value => {
-					this.plugin.settings.lightTheme = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		const customThemeFolderSetting = new Setting(this.containerEl)
-			.setName('Custom themes folder location')
-			.setDesc('Folder relative to your Vault where custom JSON theme files are located.')
-			.addText(textbox => {
-				textbox
-					.setValue(this.plugin.settings.customThemeFolder)
-					.onChange(async value => {
-						this.plugin.settings.customThemeFolder = value;
-						await this.plugin.saveSettings();
-					})
-					.then(textbox => {
-						textbox.inputEl.addClass('shiki-custom-theme-folder');
+		return [
+			{
+				name: 'All setting changes require a reload of the highlighter',
+				render: (setting): void => {
+					setting.addButton(button => {
+						button
+							.setCta()
+							.setButtonText('Reload Highlighter')
+							.onClick(async () => {
+								button.setDisabled(true);
+								await this.plugin.reloadHighlighter();
+								button.setDisabled(false);
+							});
 					});
-			});
+				},
+			},
+			{
+				name: 'Inline Syntax Highlighting',
+				desc: 'Enables syntax highlighting for inline code blocks via `{lang} code`.',
+				control: { type: 'toggle', key: 'inlineHighlighting' },
+			},
+			{
+				type: 'group',
+				heading: 'Code block defaults',
+				items: [
+					{
+						name: 'Show line numbers',
+						desc: 'Controls whether line numbers are shown by default.',
+						control: { type: 'toggle', key: 'ecDefaultShowLineNumbers' },
+					},
+					{
+						name: 'Wrap',
+						desc: 'Controls whether code block lines wrap by default in reading mode. In the editor, code blocks follow the editor line wrapping.',
+						control: { type: 'toggle', key: 'ecDefaultWrap' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Theme',
+				extraButtons: this.openFolderButtons('customThemeFolder', 'Open custom themes folder'),
+				items: [
+					{
+						name: 'Dark theme',
+						desc: "The theme for code blocks when Obsidian's base color scheme is dark.",
+						control: { type: 'dropdown', key: 'darkTheme', options: themes },
+					},
+					{
+						name: 'Light theme',
+						desc: "The theme for code blocks when Obsidian's base color scheme is light.",
+						control: { type: 'dropdown', key: 'lightTheme', options: themes },
+					},
+					{
+						name: 'Custom themes folder location',
+						desc: 'Folder relative to your Vault where custom JSON theme files are located.',
+						control: { type: 'folder', key: 'customThemeFolder' },
+					},
+					{
+						name: 'Prefer theme colors',
+						desc: 'When enabled the plugin will prefer theme colors over CSS variables for things like the code block background.',
+						control: { type: 'toggle', key: 'preferThemeColors' },
+					},
+				],
+			},
+			{
+				type: 'group',
+				heading: 'Languages',
+				extraButtons: this.openFolderButtons('customLanguageFolder', 'Open custom languages folder'),
+				items: [
+					{
+						name: 'Custom languages folder location',
+						desc: 'Folder relative to your Vault where custom JSON language files are located.',
+						control: { type: 'folder', key: 'customLanguageFolder' },
+					},
+				],
+			},
+			{
+				type: 'list',
+				heading: 'Excluded Languages',
+				emptyState: 'No languages are excluded.',
+				addItem: {
+					name: 'Add Language Rule',
+					action: (): void => {
+						const modal = new StringSelectModal(this.plugin, this.plugin.highlighter.supportedLanguages, language => {
+							if (!this.plugin.settings.disabledLanguages.includes(language)) {
+								this.plugin.settings.disabledLanguages.push(language);
+							}
+							void this.plugin.saveSettings();
+							this.update();
+						});
+						modal.open();
+					},
+				},
+				onDelete: (index): void => {
+					this.plugin.settings.disabledLanguages.splice(index, 1);
+					void this.plugin.saveSettings();
+					this.update();
+				},
+				items: this.plugin.settings.disabledLanguages.map(language => ({ name: language })),
+			},
+		];
+	}
 
-		new Setting(this.containerEl)
-			.setName('Prefer theme colors')
-			.setDesc('When enabled the plugin will prefer theme colors over CSS variables for things like the code block background.')
-			.addToggle(toggle => {
-				toggle.setValue(this.plugin.settings.preferThemeColors).onChange(async value => {
-					this.plugin.settings.preferThemeColors = value;
-					await this.plugin.saveSettings();
-				});
-			});
-
-		new Setting(this.containerEl).setHeading().setName('Languages');
-
-		const customLanguageFolderSetting = new Setting(this.containerEl)
-			.setName('Custom languages folder location')
-			.setDesc('Folder relative to your Vault where custom JSON language files are located.')
-			.addText(textbox => {
-				textbox
-					.setValue(this.plugin.settings.customLanguageFolder)
-					.onChange(async value => {
-						this.plugin.settings.customLanguageFolder = value;
-						await this.plugin.saveSettings();
-					})
-					.then(textbox => {
-						textbox.inputEl.addClass('shiki-custom-language-folder');
-					});
-			});
-
-		new Setting(this.containerEl)
-			.setName('Excluded Languages')
-			.setDesc('Configure language to exclude.')
-			.addButton(button => {
-				button.setButtonText('Add Language Rule').onClick(() => {
-					const modal = new StringSelectModal(this.plugin, this.plugin.highlighter.supportedLanguages, language => {
-						this.plugin.settings.disabledLanguages.push(language);
-						void this.plugin.saveSettings();
-						this.display();
-					});
-					modal.open();
-				});
-			});
-
-		for (const language of this.plugin.settings.disabledLanguages) {
-			new Setting(this.containerEl).setName(language).addButton(button => {
-				button
-					.setIcon('trash')
-					.setWarning()
-					.onClick(() => {
-						this.plugin.settings.disabledLanguages = this.plugin.settings.disabledLanguages.filter(x => x !== language);
-						void this.plugin.saveSettings();
-						this.display();
-					});
-			});
+	private openFolderButtons(key: 'customThemeFolder' | 'customLanguageFolder', tooltip: string): ((button: ExtraButtonComponent) => void)[] {
+		if (!Platform.isDesktopApp) {
+			return [];
 		}
 
-		if (Platform.isDesktopApp) {
-			customThemeFolderSetting.addExtraButton(button => {
+		return [
+			(button): void => {
 				button
 					.setIcon('folder-open')
-					.setTooltip('Open custom themes folder')
+					.setTooltip(tooltip)
 					.onClick(async () => {
-						const themeFolder = normalizePath(this.plugin.settings.customThemeFolder);
-						if (await this.app.vault.adapter.exists(themeFolder)) {
-							this.plugin.app.openWithDefaultApp(themeFolder);
+						const folder = normalizePath(this.plugin.settings[key]);
+						if (await this.app.vault.adapter.exists(folder)) {
+							this.app.openWithDefaultApp(folder);
 						} else {
-							new Notice(`Unable to open custom themes folder: ${themeFolder}`, 5000);
+							new Notice(`Unable to open folder: ${folder}`, 5000);
 						}
 					});
-			});
-
-			customLanguageFolderSetting.addExtraButton(button => {
-				button
-					.setIcon('folder-open')
-					.setTooltip('Open custom languages folder')
-					.onClick(async () => {
-						const languageFolder = normalizePath(this.plugin.settings.customLanguageFolder);
-						if (await this.app.vault.adapter.exists(languageFolder)) {
-							this.plugin.app.openWithDefaultApp(languageFolder);
-						} else {
-							new Notice(`Unable to open custom languages folder: ${languageFolder}`, 5000);
-						}
-					});
-			});
-		}
+			},
+		];
 	}
 }

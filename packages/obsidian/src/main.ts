@@ -25,12 +25,13 @@ export default class ShikiPlugin extends Plugin {
 	async onload(): Promise<void> {
 		await this.loadSettings();
 		this.loadedSettings = structuredClone(this.settings);
-		this.addSettingTab(new ShikiSettingsTab(this));
 
 		this.highlighter = new CodeHighlighter(this);
 		// only the custom files are needed to register the code block processors,
 		// loading the engines is deferred to not slow down Obsidian's startup, renders wait for them
 		await this.highlighter.loadCustomFiles();
+		// the settings tab reads the custom themes when it builds its definitions
+		this.addSettingTab(new ShikiSettingsTab(this));
 		this.app.workspace.onLayoutReady(() => {
 			void this.highlighter.loadEngines();
 		});
