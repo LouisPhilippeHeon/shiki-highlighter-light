@@ -12,6 +12,7 @@
         "@expressive-code/core": "^0.41.7",
         "@expressive-code/plugin-collapsible-sections": "^0.41.7",
         "@expressive-code/plugin-line-numbers": "^0.41.7",
+        "@expressive-code/plugin-shiki": "^0.41.7",
         "@expressive-code/plugin-text-markers": "^0.41.7",
         "@happy-dom/global-registrator": "^20.9.0",
         "@lemons_dev/lemons-obsidian-plugin-automation": "^0.1.3",
@@ -75,6 +76,8 @@
     "@expressive-code/plugin-collapsible-sections": ["@expressive-code/plugin-collapsible-sections@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7" } }, "sha512-uh74qWhAW6FEoNdlQAcHCcGBfuhslLvbWL5Fqmi+db/9mZI/I2G1Sr8NfApTEzD+jiIB/GmdPHV9kbjebkn0+g=="],
 
     "@expressive-code/plugin-line-numbers": ["@expressive-code/plugin-line-numbers@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7" } }, "sha512-wI9D5NBcgE9ksiJJV8YfOC0RPI3283+9AYWIb8pBUM5TSM8msIs1YRPDt8c8Ub0XGQvbjJKtB+f9fAl2RiHJ2A=="],
+
+    "@expressive-code/plugin-shiki": ["@expressive-code/plugin-shiki@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7", "shiki": "^3.2.2" } }, "sha512-DL605bLrUOgqTdZ0Ot5MlTaWzppRkzzqzeGEu7ODnHF39IkEBbFdsC7pbl3LbUQ1DFtnfx6rD54k/cdofbW6KQ=="],
 
     "@expressive-code/plugin-text-markers": ["@expressive-code/plugin-text-markers@0.41.7", "", { "dependencies": { "@expressive-code/core": "^0.41.7" } }, "sha512-Ewpwuc5t6eFdZmWlFyeuy3e1PTQC0jFvw2Q+2bpcWXbOZhPLsT7+h8lsSIJxb5mS7wZko7cKyQ2RLYDyK6Fpmw=="],
 

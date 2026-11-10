@@ -17,7 +17,7 @@ export const SHIKI_INLINE_REGEX = /^\{([^\s]+)\} (.*)/i; // format: `{lang} code
 
 export default class ShikiPlugin extends Plugin {
 	highlighter!: CodeHighlighter;
-	activeCodeBlocks!: Map<string, Set<CodeBlock | InlineCodeBlock>>;
+	activeCodeBlocks!: Map<string, (CodeBlock | InlineCodeBlock)[]>;
 	declare settings: Settings;
 	loadedSettings!: Settings;
 	updateCm6Plugin!: () => Promise<void>;
@@ -150,26 +150,21 @@ export default class ShikiPlugin extends Plugin {
 	addActiveCodeBlock(codeBlock: CodeBlock | InlineCodeBlock): void {
 		const filePath = codeBlock.ctx.sourcePath;
 
-		const codeBlocks = this.activeCodeBlocks.get(filePath);
-		if (codeBlocks === undefined) {
-			this.activeCodeBlocks.set(filePath, new Set([codeBlock]));
+		if (!this.activeCodeBlocks.has(filePath)) {
+			this.activeCodeBlocks.set(filePath, [codeBlock]);
 		} else {
-			codeBlocks.add(codeBlock);
+			this.activeCodeBlocks.get(filePath)!.push(codeBlock);
 		}
 	}
 
 	removeActiveCodeBlock(codeBlock: CodeBlock | InlineCodeBlock): void {
 		const filePath = codeBlock.ctx.sourcePath;
 
-		const codeBlocks = this.activeCodeBlocks.get(filePath);
-		if (codeBlocks === undefined) {
-			return;
-		}
-
-		codeBlocks.delete(codeBlock);
-		// don't keep an entry for every file that was ever opened
-		if (codeBlocks.size === 0) {
-			this.activeCodeBlocks.delete(filePath);
+		if (this.activeCodeBlocks.has(filePath)) {
+			const index = this.activeCodeBlocks.get(filePath)!.indexOf(codeBlock);
+			if (index !== -1) {
+				this.activeCodeBlocks.get(filePath)!.splice(index, 1);
+			}
 		}
 	}
 

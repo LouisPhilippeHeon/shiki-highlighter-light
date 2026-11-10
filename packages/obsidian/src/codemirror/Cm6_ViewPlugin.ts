@@ -39,8 +39,6 @@ interface DocWindow {
 }
 
 const TOKEN_CACHE_SIZE = 500;
-// the cache keys contain the whole code, so the cache is also limited by the total length of the cached code
-const TOKEN_CACHE_MAX_CHARS = 2_000_000;
 // line decorations carry the line number, so there can be many distinct ones, unlike token marks
 const LINE_DECORATION_CACHE_SIZE = 10_000;
 // the minimum number of characters decorated above and below the viewport
@@ -103,8 +101,6 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 	// Tokens of recently highlighted code, shared between all editors.
 	// Without it, every edit would re-tokenize every code block in the note.
 	const tokenCache = new Map<string, TokensResult | undefined>();
-	// the total length of the keys of the token cache
-	let tokenCacheChars = 0;
 	const instances = new Set<Cm6ViewPlugin>();
 	// Decorations are immutable values, so all tokens and lines with the same style share one decoration object.
 	// This saves a lot of memory in large notes and lets codemirror skip unchanged DOM on rebuilds.
@@ -113,7 +109,6 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 
 	plugin.updateCm6Plugin = async (): Promise<void> => {
 		tokenCache.clear();
-		tokenCacheChars = 0;
 		markCache.clear();
 		lineDecorationCache.clear();
 		await Promise.all([...instances].map(instance => instance.rebuild(instance.view)));
@@ -130,16 +125,9 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		}
 
 		const tokens = await plugin.highlighter.getHighlightTokens(code, lang);
-		// another call may have cached the same code while we were waiting
-		if (!tokenCache.has(key)) {
-			tokenCacheChars += key.length;
-		}
 		tokenCache.set(key, tokens);
-		// evict the least recently used entries, but always keep the one just added
-		while (tokenCache.size > 1 && (tokenCache.size > TOKEN_CACHE_SIZE || tokenCacheChars > TOKEN_CACHE_MAX_CHARS)) {
-			const oldest = tokenCache.keys().next().value!;
-			tokenCache.delete(oldest);
-			tokenCacheChars -= oldest.length;
+		if (tokenCache.size > TOKEN_CACHE_SIZE) {
+			tokenCache.delete(tokenCache.keys().next().value!);
 		}
 		return tokens;
 	}
