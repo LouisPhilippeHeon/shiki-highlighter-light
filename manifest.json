@@ -1,11 +1,10 @@
 {
-	"id": "shiki-highlighter",
-	"name": "Shiki Highlighter",
+	"id": "shiki-highlighter-light",
+	"name": "Shiki Highlighter Light",
 	"version": "0.7.7",
 	"minAppVersion": "1.13.0",
 	"description": "Highlight code blocks with Shiki.",
-	"author": "Moritz Jung",
-	"authorUrl": "https://www.moritzjung.dev",
-	"fundingUrl": "https://github.com/sponsors/mProjectsCode",
+	"author": "Louis-Philippe Héon",
+	"authorUrl": "https://github.com/LouisPhilippeHeon",
 	"isDesktopOnly": false
 }
