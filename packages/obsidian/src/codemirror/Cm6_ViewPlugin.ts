@@ -3,6 +3,7 @@ import { SHIKI_INLINE_REGEX } from 'packages/obsidian/src/main';
 import { Decoration, type DecorationSet, type EditorView, ViewPlugin, type ViewUpdate } from '@codemirror/view';
 import { type EditorState, type Range, type Text } from '@codemirror/state';
 import { syntaxTree } from '@codemirror/language';
+import { type Tree } from '@lezer/common';
 import { Cm6_Util } from 'packages/obsidian/src/codemirror/Cm6_Util';
 import { type TokensResult } from 'shiki';
 import { editorLivePreviewField } from 'obsidian';
@@ -32,7 +33,68 @@ interface FencedCodeBlock {
 	lastCodeLine: number;
 }
 
+interface DocWindow {
+	from: number;
+	to: number;
+}
+
 const TOKEN_CACHE_SIZE = 500;
+// line decorations carry the line number, so there can be many distinct ones, unlike token marks
+const LINE_DECORATION_CACHE_SIZE = 10_000;
+// the minimum number of characters decorated above and below the viewport
+const MIN_WINDOW_MARGIN = 2_000;
+
+const CODE_BLOCK_BEGIN = 'HyperMD-codeblock-begin';
+const CODE_BLOCK_END = 'HyperMD-codeblock-end';
+
+function hasNodeProp(nodeName: string, prop: string): boolean {
+	return nodeName.split('_').includes(prop);
+}
+
+/**
+ * The part of the document that gets decorated: the viewport plus a margin, so that scrolling a bit does not need a rebuild.
+ */
+function getDecorationWindow(view: EditorView): DocWindow {
+	const { from, to } = view.viewport;
+	const margin = Math.max(to - from, MIN_WINDOW_MARGIN);
+	return { from: Math.max(0, from - margin), to: Math.min(view.state.doc.length, to + margin) };
+}
+
+function isLineInWindow(lineFrom: number, lineTo: number, window: DocWindow): boolean {
+	return lineFrom <= window.to && lineTo >= window.from;
+}
+
+/**
+ * Looks backwards from `pos` for the opening fence of a code block that `pos` is in.
+ * Returns the position of the opening fence, or null if `pos` is not in a code block.
+ */
+function findCodeBlockBeginBefore(tree: Tree, pos: number): number | null {
+	const cursor = tree.cursorAt(pos, -1);
+	do {
+		const name = cursor.type.name;
+		if (hasNodeProp(name, CODE_BLOCK_END)) {
+			return null;
+		}
+		if (hasNodeProp(name, CODE_BLOCK_BEGIN)) {
+			return cursor.from;
+		}
+	} while (cursor.prev());
+	return null;
+}
+
+/**
+ * Looks forwards from `pos` for the closing fence of the code block that was opened at `beginPos`.
+ * Returns the position of the closing fence, or null if the code block is not closed in the parsed part of the document.
+ */
+function findCodeBlockEndAfter(tree: Tree, pos: number, beginPos: number): number | null {
+	const cursor = tree.cursorAt(pos, 1);
+	do {
+		if (cursor.from > beginPos && hasNodeProp(cursor.type.name, CODE_BLOCK_END)) {
+			return cursor.from;
+		}
+	} while (cursor.next());
+	return null;
+}
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type -- not an easily named type
 export function createCm6Plugin(plugin: ShikiPlugin) {
@@ -40,9 +102,15 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 	// Without it, every edit would re-tokenize every code block in the note.
 	const tokenCache = new Map<string, TokensResult | undefined>();
 	const instances = new Set<Cm6ViewPlugin>();
+	// Decorations are immutable values, so all tokens and lines with the same style share one decoration object.
+	// This saves a lot of memory in large notes and lets codemirror skip unchanged DOM on rebuilds.
+	const markCache = new Map<string, Decoration>();
+	const lineDecorationCache = new Map<string, Decoration>();
 
 	plugin.updateCm6Plugin = async (): Promise<void> => {
 		tokenCache.clear();
+		markCache.clear();
+		lineDecorationCache.clear();
 		await Promise.all([...instances].map(instance => instance.rebuild(instance.view)));
 	};
 
@@ -70,39 +138,64 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 	}
 
 	function tokenMark(from: number, to: number, style: { style: string; classes: string[] }): Range<Decoration> {
-		return Decoration.mark({
-			class: ['shiki-token', ...style.classes].join(' '),
-			attributes: { style: style.style },
-		}).range(from, to);
+		const cls = ['shiki-token', ...style.classes].join(' ');
+		const key = `${cls}\n${style.style}`;
+		let decoration = markCache.get(key);
+		if (decoration === undefined) {
+			decoration = Decoration.mark({ class: cls, attributes: { style: style.style } });
+			markCache.set(key, decoration);
+		}
+		return decoration.range(from, to);
+	}
+
+	function lineDecoration(pos: number, cls: string | undefined, attributes: Record<string, string>): Range<Decoration> {
+		const key = [cls ?? '', ...Object.entries(attributes).flat()].join('\n');
+		let decoration = lineDecorationCache.get(key);
+		if (decoration === undefined) {
+			if (lineDecorationCache.size >= LINE_DECORATION_CACHE_SIZE) {
+				lineDecorationCache.clear();
+			}
+			decoration = Decoration.line(cls === undefined ? { attributes } : { class: cls, attributes });
+			lineDecorationCache.set(key, decoration);
+		}
+		return decoration.range(pos);
 	}
 
 	/**
-	 * Finds the shiki inline code (`{lang} code`) and the fenced code blocks in the parsed part of the document.
+	 * Finds the shiki inline code (`{lang} code`) and the fenced code blocks in the window of the parsed part of the document.
+	 * Code blocks that only partially overlap the window are returned whole, since they have to be tokenized from the start.
 	 */
-	function findCode(state: EditorState, includeCodeBlocks: boolean): { inlineCodes: InlineCode[]; codeBlocks: FencedCodeBlock[] } {
+	function findCode(state: EditorState, window: DocWindow, includeCodeBlocks: boolean): { inlineCodes: InlineCode[]; codeBlocks: FencedCodeBlock[] } {
 		const inlineCodes: InlineCode[] = [];
 		const codeBlocks: FencedCodeBlock[] = [];
 		let openBlock: FencedCodeBlock | undefined;
+		let openBlockBegin = 0;
 		const livePreview = isLivePreview(state);
 
 		const tree = syntaxTree(state);
 		// an unclosed code block goes until the end of the parsed part of the document
 		const lastParsedLine = state.doc.lineAt(Math.min(tree.length, state.doc.length)).number;
 
-		tree.iterate({
-			enter: nodeRef => {
-				const props = new Set<string>(nodeRef.type.name.split('_'));
+		// start at the opening fence of a code block that begins above the window and reaches into it
+		const iterateFrom = (includeCodeBlocks ? findCodeBlockBeginBefore(tree, window.from) : null) ?? window.from;
 
-				if (includeCodeBlocks && props.has('HyperMD-codeblock-begin')) {
+		tree.iterate({
+			from: iterateFrom,
+			to: window.to,
+			enter: nodeRef => {
+				const name = nodeRef.type.name;
+
+				if (includeCodeBlocks && hasNodeProp(name, CODE_BLOCK_BEGIN)) {
 					const line = state.doc.lineAt(nodeRef.from).number;
 					if (openBlock?.beginLine !== line) {
 						openBlock = { beginLine: line, endLine: null, lastCodeLine: lastParsedLine };
+						openBlockBegin = nodeRef.from;
 						codeBlocks.push(openBlock);
 					}
 					return;
 				}
 
-				if (includeCodeBlocks && props.has('HyperMD-codeblock-end')) {
+				if (includeCodeBlocks && hasNodeProp(name, CODE_BLOCK_END)) {
 					if (openBlock !== undefined) {
 						openBlock.endLine = state.doc.lineAt(nodeRef.from).number;
 						openBlock.lastCodeLine = openBlock.endLine - 1;
@@ -111,7 +204,7 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 					return;
 				}
 
-				if (props.has('formatting') || !props.has('inline-code') || !plugin.settings.inlineHighlighting) {
+				if (hasNodeProp(name, 'formatting') || !hasNodeProp(name, 'inline-code') || !plugin.settings.inlineHighlighting) {
 					return;
 				}
 
@@ -132,6 +225,15 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 				});
 			},
 		});
+
+		// a code block that begins in the window and ends below it
+		if (openBlock !== undefined) {
+			const endPos = findCodeBlockEndAfter(tree, window.to, openBlockBegin);
+			if (endPos !== null) {
+				openBlock.endLine = state.doc.lineAt(endPos).number;
+				openBlock.lastCodeLine = openBlock.endLine - 1;
+			}
+		}
 
 		return { inlineCodes, codeBlocks };
 	}
@@ -158,7 +260,11 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		return decorations;
 	}
 
-	async function buildCodeBlockDecorations(doc: Text, codeBlock: FencedCodeBlock): Promise<Range<Decoration>[]> {
+	/**
+	 * Builds the decorations of the lines of the code block that are in the window.
+	 * The whole code block is still tokenized, since tokenizing depends on the lines before.
+	 */
+	async function buildCodeBlockDecorations(doc: Text, codeBlock: FencedCodeBlock, window: DocWindow): Promise<Range<Decoration>[]> {
 		const fence = parseFenceLine(doc.line(codeBlock.beginLine).text);
 		const lang = fence?.language.toLowerCase() ?? '';
 		if (fence === null || lang === '') {
@@ -188,8 +294,14 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		const decorations: Range<Decoration>[] = [];
 
 		// token offsets are relative to the whole code, so we track where each line starts in the code
+		const lineInWindow = (i: number): boolean => isLineInWindow(lineStarts[i], lineStarts[i] + codeLines[i].length, window);
+
 		let lineOffset = 0;
 		for (let i = 0; i < highlight.tokens.length && i < codeLines.length; i++) {
+			if (!lineInWindow(i)) {
+				lineOffset += codeLines[i].length + 1;
+				continue;
+			}
 			for (const token of highlight.tokens[i]) {
 				const from = lineStarts[i] + token.offset - lineOffset;
 				const to = from + token.content.length;
@@ -206,12 +318,20 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		const lineNumberWidth = String(meta.startLineNumber + codeLines.length - 1).length;
 
 		for (const fenceLine of [codeBlock.beginLine, codeBlock.endLine]) {
-			if (fenceLine !== null && themeStyle !== '') {
-				decorations.push(Decoration.line({ attributes: { style: themeStyle } }).range(doc.line(fenceLine).from));
+			if (fenceLine === null || themeStyle === '') {
+				continue;
+			}
+			const line = doc.line(fenceLine);
+			if (isLineInWindow(line.from, line.to, window)) {
+				decorations.push(lineDecoration(line.from, undefined, { style: themeStyle }));
 			}
 		}
 
 		for (let i = 0; i < codeLines.length; i++) {
+			if (!lineInWindow(i)) {
+				continue;
+			}
+
 			const classes = ['shiki-line'];
 			const attributes: Record<string, string> = {};
 			let style = themeStyle;
@@ -231,7 +351,7 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 				attributes.style = style;
 			}
 
-			decorations.push(Decoration.line({ class: classes.join(' '), attributes }).range(doc.line(codeBlock.beginLine + 1 + i).from));
+			decorations.push(lineDecoration(doc.line(codeBlock.beginLine + 1 + i).from, classes.join(' '), attributes));
 		}
 
 		return decorations;
@@ -245,11 +365,26 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		 * waiting for the highlighter, so the next update has to rebuild everything, even if it is just a selection change.
 		 */
 		rebuildPending: boolean;
+		/**
+		 * The part of the document the current decorations cover. Only the viewport plus a margin gets decorated.
+		 */
+		window: DocWindow;
+		/**
+		 * Incremented by every rebuild, so that a rebuild can tell that a newer one replaced it.
+		 */
+		generation: number;
+		/**
+		 * The animation frame of a scheduled rebuild, if any.
+		 */
+		scheduledRebuild: number | null;
 
 		constructor(view: EditorView) {
 			this.view = view;
 			this.decorations = Decoration.none;
 			this.rebuildPending = false;
+			this.window = { from: 0, to: 0 };
+			this.generation = 0;
+			this.scheduledRebuild = null;
 			instances.add(this);
 
 			void this.rebuild(view);
@@ -268,48 +403,94 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 				console.warn('Resetting decorations due to error:', e);
 			}
 
-			const needsRebuild =
-				this.rebuildPending ||
-				update.docChanged ||
+			if (update.docChanged) {
+				this.window = {
+					from: update.changes.mapPos(this.window.from, -1),
+					to: update.changes.mapPos(this.window.to, 1),
+				};
+			}
+
+			// rebuild right away when the decorations are wrong, so that typed text is highlighted without delay
+			const needsRebuild = this.rebuildPending || update.docChanged || isLivePreview(update.startState) !== isLivePreview(update.state);
+			// these happen a lot while a large note is opened or scrolled, so they are coalesced to one rebuild per frame
+			const needsScheduledRebuild =
 				// the document is parsed incrementally, so code blocks further down are found later
 				syntaxTree(update.startState) !== syntaxTree(update.state) ||
-				isLivePreview(update.startState) !== isLivePreview(update.state);
+				// the viewport left the decorated part of the document
+				(update.viewportChanged && !this.windowCovers(update.view.viewport));
 
 			if (needsRebuild) {
 				void this.rebuild(update.view);
+			} else if (needsScheduledRebuild) {
+				this.scheduleRebuild();
 			} else if (update.selectionSet) {
 				// the selection only affects whether the language of inline code is hidden
 				void this.updateInlineCode(update.view);
 			}
 		}
 
+		private windowCovers(range: DocWindow): boolean {
+			return range.from >= this.window.from && range.to <= this.window.to;
+		}
+
+		private scheduleRebuild(): void {
+			if (this.scheduledRebuild !== null) {
+				return;
+			}
+
+			this.scheduledRebuild = requestAnimationFrame(() => {
+				this.scheduledRebuild = null;
+				void this.rebuild(this.view);
+			});
+		}
+
+		private cancelScheduledRebuild(): void {
+			if (this.scheduledRebuild !== null) {
+				cancelAnimationFrame(this.scheduledRebuild);
+				this.scheduledRebuild = null;
+			}
+		}
+
 		/**
-		 * Rebuilds all decorations. The old decorations stay until the new ones are ready, to avoid flickering.
+		 * Rebuilds the decorations of the viewport and its margin. The old decorations stay until the new ones are ready, to avoid flickering.
 		 */
 		async rebuild(view: EditorView): Promise<void> {
+			// this rebuild covers everything a scheduled one would do
+			this.cancelScheduledRebuild();
+			const generation = ++this.generation;
 			this.rebuildPending = true;
 			const state = view.state;
-			const { inlineCodes, codeBlocks } = findCode(state, true);
+			const window = getDecorationWindow(view);
+			const { inlineCodes, codeBlocks } = findCode(state, window, true);
+
+			// The positions are stale if the document changed while we were waiting for the highlighter,
+			// in that case the rebuild started by that change takes over. A newer rebuild also takes over.
+			const isStale = (): boolean => generation !== this.generation || this.view.state !== state;
 
 			const decorations: Range<Decoration>[] = [];
 			try {
 				for (const codeBlock of codeBlocks) {
-					decorations.push(...(await buildCodeBlockDecorations(state.doc, codeBlock)));
+					decorations.push(...(await buildCodeBlockDecorations(state.doc, codeBlock, window)));
+					if (isStale()) {
+						return;
+					}
 				}
 				for (const inlineCode of inlineCodes) {
 					decorations.push(...(await buildInlineDecorations(inlineCode)));
+					if (isStale()) {
+						return;
+					}
 				}
 			} catch (e) {
 				console.error(e);
 			}
 
-			// the positions are stale if the document changed while we were waiting for the highlighter,
-			// in that case the rebuild started by that change takes over
-			if (this.view.state !== state) {
+			if (isStale()) {
 				return;
 			}
 
 			this.decorations = Decoration.set(decorations, true);
+			this.window = window;
 			this.rebuildPending = false;
 			this.redraw(state);
 		}
@@ -319,7 +500,7 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		 */
 		async updateInlineCode(view: EditorView): Promise<void> {
 			const state = view.state;
-			const { inlineCodes } = findCode(state, false);
+			const { inlineCodes } = findCode(state, this.window, false);
 			if (inlineCodes.length === 0) {
 				return;
 			}
@@ -362,6 +543,9 @@ export function createCm6Plugin(plugin: ShikiPlugin) {
 		 */
 		destroy(): void {
 			instances.delete(this);
+			this.cancelScheduledRebuild();
+			// abandons a rebuild that is still waiting for the highlighter
+			this.generation++;
 			this.decorations = Decoration.none;
 		}
 	}
